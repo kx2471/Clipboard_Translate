@@ -30,7 +30,9 @@ class ClipboardTranslator:
         self.last_image = None
         self.last_text = None
         self.running = True
-        self.paused = False
+        self.ocr_only_mode = False  # F7: OCR 전용 모드
+        self.ocr_translate_mode = True  # F8: OCR + 번역 모드 (기본값)
+        self.paused = False  # F9: 일시정지 모드
 
         print("=" * 60)
         print("📋 클립보드 자동 번역기 시작!")
@@ -38,20 +40,44 @@ class ClipboardTranslator:
         print(f"원본 언어: {source_lang} → 번역 언어: {target_lang}")
         print("이미지 또는 텍스트를 클립보드에 복사하면 자동으로 번역됩니다.")
         print("\n⌨️  단축키:")
-        print("  F8: 일시정지/재개")
+        print("  F7: OCR 전용 모드 ON/OFF (번역 없이 원본 텍스트만)")
+        print("  F8: OCR + 번역 모드 ON/OFF (기본 모드)")
+        print("  F9: 일시정지 / 재개")
         print("  Ctrl+C: 종료")
         print("=" * 60)
 
-        # F8 키 리스너 등록
-        keyboard.on_press_key('f8', self.toggle_pause)
+        # 단축키 리스너 등록
+        keyboard.on_press_key('f7', self.toggle_ocr_only_mode)
+        keyboard.on_press_key('f8', self.toggle_ocr_translate_mode)
+        keyboard.on_press_key('f9', self.toggle_pause)
+
+    def toggle_ocr_only_mode(self, event=None):
+        """F7 키로 OCR 전용 모드 ON/OFF"""
+        self.ocr_only_mode = not self.ocr_only_mode
+
+        if self.ocr_only_mode:
+            self.ocr_translate_mode = False  # 번역 모드 끄기
+            print("\n🔍 F7: OCR 전용 모드 ON (원본 텍스트만 추출)")
+        else:
+            print("\n🔍 F7: OCR 전용 모드 OFF")
+
+    def toggle_ocr_translate_mode(self, event=None):
+        """F8 키로 OCR + 번역 모드 ON/OFF"""
+        self.ocr_translate_mode = not self.ocr_translate_mode
+
+        if self.ocr_translate_mode:
+            self.ocr_only_mode = False  # OCR 전용 모드 끄기
+            print("\n🌐 F8: OCR + 번역 모드 ON")
+        else:
+            print("\n🌐 F8: OCR + 번역 모드 OFF")
 
     def toggle_pause(self, event=None):
-        """F8 키로 일시정지/재개 토글"""
+        """F9 키로 일시정지/재개 토글"""
         self.paused = not self.paused
         if self.paused:
-            print("\n⏸️  번역 일시정지 (F8을 다시 눌러 재개)")
+            print("\n⏸️  F9: 일시정지 (F9를 다시 눌러 재개)")
         else:
-            print("\n▶️  번역 재개")
+            print("\n▶️  F9: 재개")
 
     def extract_text_from_image(self, image):
         """이미지에서 텍스트 추출 (OCR)"""
@@ -299,26 +325,44 @@ class ClipboardTranslator:
                 print("⚠️  텍스트를 찾을 수 없습니다.")
                 return False
 
-            # 줄바꿈 스마트 병합
-            merged_text = self.smart_text_merge(extracted_text)
+            # OCR 전용 모드 (F7)
+            if self.ocr_only_mode:
+                print(f"\n🔍 추출된 원본 텍스트:\n{extracted_text}")
 
-            print(f"\n원본 텍스트 (OCR):\n{extracted_text}")
-            print(f"\n정리된 텍스트:\n{merged_text}")
-            print("\n🌐 번역 중...")
+                # 원본 텍스트를 클립보드에 복사
+                pyperclip.copy(extracted_text)
+                self.last_text = extracted_text
+                print("\n✅ 원본 텍스트가 클립보드에 복사되었습니다!")
+                print("─" * 60)
+                return True
 
-            # 텍스트 번역
-            translated_text = self.translate_text(merged_text)
+            # OCR + 번역 모드 (F8)
+            if self.ocr_translate_mode:
+                # 줄바꿈 스마트 병합
+                merged_text = self.smart_text_merge(extracted_text)
 
-            if translated_text:
-                print(f"\n번역된 텍스트:\n{translated_text}")
+                print(f"\n원본 텍스트 (OCR):\n{extracted_text}")
+                print(f"\n정리된 텍스트:\n{merged_text}")
+                print("\n🌐 번역 중...")
 
-                # 번역된 텍스트를 클립보드에 복사
-                pyperclip.copy(translated_text)
-                self.last_text = translated_text  # 번역 결과도 중복 방지에 추가
-                print("\n✅ 번역된 텍스트가 클립보드에 복사되었습니다!")
+                # 텍스트 번역
+                translated_text = self.translate_text(merged_text)
 
+                if translated_text:
+                    print(f"\n번역된 텍스트:\n{translated_text}")
+
+                    # 번역된 텍스트를 클립보드에 복사
+                    pyperclip.copy(translated_text)
+                    self.last_text = translated_text  # 번역 결과도 중복 방지에 추가
+                    print("\n✅ 번역된 텍스트가 클립보드에 복사되었습니다!")
+
+                print("─" * 60)
+                return True
+
+            # 모든 모드가 OFF인 경우
+            print("\n⚠️  모든 모드가 꺼져 있습니다. F7 또는 F8을 눌러 모드를 활성화하세요.")
             print("─" * 60)
-            return True
+            return False
 
         except Exception as e:
             print(f"❌ 처리 오류: {e}")
