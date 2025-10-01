@@ -7,6 +7,9 @@ Clipboard Image to Translated Text Converter
 
 import time
 import io
+import os
+import sys
+from pathlib import Path
 from PIL import ImageGrab, Image
 import pytesseract
 from googletrans import Translator
@@ -14,8 +17,60 @@ import pyperclip
 import threading
 import keyboard
 
-# Tesseract 경로 설정 (Windows 기본 설치 경로)
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Tesseract 경로 자동 감지
+def find_tesseract():
+    """Tesseract 실행 파일 경로를 자동으로 찾기"""
+    # 1. 실행 파일과 같은 폴더의 tesseract 폴더 확인
+    if getattr(sys, 'frozen', False):
+        # PyInstaller로 패키징된 경우
+        base_path = Path(sys.executable).parent
+    else:
+        # 일반 Python 스크립트로 실행된 경우
+        base_path = Path(__file__).parent
+
+    # 실행 파일 위치의 tesseract 폴더
+    local_tesseract = base_path / "tesseract" / "tesseract.exe"
+    if local_tesseract.exists():
+        return str(local_tesseract)
+
+    # 2. 환경 변수에서 tesseract 찾기
+    tesseract_cmd = os.getenv('TESSERACT_CMD')
+    if tesseract_cmd and Path(tesseract_cmd).exists():
+        return tesseract_cmd
+
+    # 3. Windows 기본 설치 경로들 확인
+    default_paths = [
+        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+        r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+        Path.home() / "AppData" / "Local" / "Tesseract-OCR" / "tesseract.exe",
+    ]
+
+    for path in default_paths:
+        if Path(path).exists():
+            return str(path)
+
+    # 4. PATH 환경 변수에서 tesseract 찾기
+    import shutil
+    tesseract_in_path = shutil.which("tesseract")
+    if tesseract_in_path:
+        return tesseract_in_path
+
+    # 찾지 못한 경우
+    return None
+
+# Tesseract 경로 설정
+tesseract_path = find_tesseract()
+if tesseract_path:
+    pytesseract.pytesseract.tesseract_cmd = tesseract_path
+    print(f"✓ Tesseract 경로: {tesseract_path}")
+else:
+    print("❌ Tesseract를 찾을 수 없습니다!")
+    print("다음 중 하나를 수행하세요:")
+    print("1. 실행 파일과 같은 폴더에 'tesseract' 폴더를 만들고 Tesseract를 설치")
+    print("2. https://github.com/UB-Mannheim/tesseract/wiki 에서 Tesseract 설치")
+    print("3. 환경 변수 TESSERACT_CMD에 tesseract.exe 경로 설정")
+    input("\n아무 키나 눌러 종료...")
+    sys.exit(1)
 
 class ClipboardTranslator:
     def __init__(self, source_lang='auto', target_lang='ko'):
@@ -204,6 +259,10 @@ class ClipboardTranslator:
             ('합니다', ''),
             ('했습니다.', '했음.'),
             ('했습니다', '했음'),
+            ('없었습니다.', '없음.'),
+            ('없었습니다', '없음'),
+            ('있었습니다.', '있었음.'),
+            ('있었습니다', '있었음'),
 
             # ~됩니다 → ~됨
             ('됩니다.', '됨.'),
